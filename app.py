@@ -2,48 +2,58 @@ import streamlit as st
 import noisereduce as nr
 import librosa
 import soundfile as sf
-import numpy as np
 import os
+import tempfile
 
 st.title("🎧 Audio Noise Remover")
 st.write("Upload your noisy audio file below.")
-s
-uploaded_file = st.file_uploader("Choose an audio file", type=["wav", "mp3", "mpeg", "ogg"])
+
+uploaded_file = st.file_uploader("Choose an audio file", type=["wav", "mp3", "mpeg", "ogg", "m4a"])
 
 if uploaded_file is not None:
-
-    
-    with open(temp_filename, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-
-    st.write("### Original Audio:")
-    st.audio(temp_filename)
-    st.info("Processing... this might take 10-20 seconds...")
-
     try:
-        data, rate = librosa.load(temp_filename, sr=None)
+        # Create temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+            tmp.write(uploaded_file.getbuffer())
+            temp_path = tmp.name
 
-     
-        reduced_noise = nr.reduce_noise(y=data, sr=rate, stationary=True)
+        st.write("### Original Audio:")
+        st.audio(uploaded_file)
+        st.info("🔄 Processing... please wait...")
 
-       
-        output_filename = "clean_audio.wav"
-        sf.write(output_filename, reduced_noise, rate)
+        # Load audio with sr=22050 (standard sample rate)
+        try:
+            data, rate = librosa.load(temp_path, sr=22050, mono=True)
+        except Exception as load_err:
+            st.error(f"Failed to load audio: {str(load_err)}")
+            st.info("💡 Tip: Try uploading a WAV file instead")
+            os.remove(temp_path)
+            st.stop()
 
-        st.success("Success! Noise removed.")
+        # Reduce noise
+        reduced = nr.reduce_noise(y=data, sr=rate, stationary=True)
 
-        st.write("### 🔉 Cleaned Audio:")
-        st.audio(output_filename, format="audio/wav")
+        # Save output
+        out_path = "cleaned_audio.wav"
+        sf.write(out_path, reduced, rate)
 
-        with open(output_filename, "rb") as file:
+        st.success("✅ Noise removed successfully!")
+        st.write("### Cleaned Audio:")
+        st.audio(out_path)
+
+        with open(out_path, "rb") as f:
             st.download_button(
-                label="⬇️ Download Clean Audio",
-                data=file,
-                file_name="clean_audio.wav",
-                mime="audio/wav"
+                "⬇️ Download Cleaned Audio",
+                f.read(),
+                "cleaned_audio.wav",
+                "audio/wav"
             )
-        os.remove(temp_filename)
+
+        # Cleanup
+        os.remove(temp_path)
+        os.remove(out_path)
 
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"❌ Error: {str(e)}")
+        st.info("Try uploading a different audio format (WAV preferred)")
 
